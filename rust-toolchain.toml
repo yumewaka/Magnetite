@@ -1,0 +1,15 @@
+# Pinned to a specific nightly for REPRODUCIBLE builds. A floating `channel =
+# "nightly"` builds against whatever nightly is current on the build host, so the
+# artifact depends on the day it was built — on 2026-08-22 the then-current nightly
+# failed to compile a SurrealDB transitive dependency (`diskann-wide`). This date is
+# the last nightly the ops team validated builds the whole workspace (incl. the
+# wasm32 hydrate target and SurrealDB). Bump it deliberately, verifying a full
+# `cargo build` + `cargo test` + the leptos wasm build, not automatically.
+[toolchain]
+channel = "nightly-2026-08-17"
+targets = ["wasm32-unknown-unknown"]
+# A pinned channel is fetched MINIMALLY by rustup — rustfmt/clippy are NOT included
+# unless listed here. They happen to be present in a dev box's default toolchain, so
+# their absence only shows up in a clean CI container (`cargo fmt`/`clippy` in the
+# Dockerfile test stage). List them so the fixed toolchain always carries them.
+components = ["rustfmt", "clippy"]

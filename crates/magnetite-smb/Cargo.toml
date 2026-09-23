@@ -1,0 +1,18 @@
+[package]
+name = "magnetite-smb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-gpo = { path = "../magnetite-gpo" }
+magnetite-krb5 = { path = "../magnetite-krb5" }
+magnetite-rpc = { path = "../magnetite-rpc" }
+tokio = { workspace = true }
+tracing = { workspace = true }
+aes = "0.8"
+aes-gcm = "0.10"
+ccm = "0.5"
+cmac = "0.7"
+hmac = "0.12"
+sha2 = { workspace = true }

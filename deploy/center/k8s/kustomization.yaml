@@ -1,0 +1,38 @@
+# Deploy Magnetite Center:  kubectl apply -k deploy/center/k8s
+#
+# Prerequisite — create the admin bearer token as a Secret (the Deployment reads it
+# via secretKeyRef). Do this once, out of band, so a real token is never committed
+# and a re-apply never overwrites the live one (see secret.example.yaml for why the
+# Secret is deliberately NOT in `resources`):
+#
+#   kubectl -n magnetite create secret generic magnetite-center-admin \
+#     --from-literal=token=$(openssl rand -hex 32)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Every resource lands in the `magnetite` namespace — the namespace the control
+# plane actually runs in (the manifests previously said `magnetite-center`, which
+# would have created a SECOND, parallel deployment under CI). The namespace itself,
+# the ci-rbac ServiceAccount, and the admin Secret are created out of band by ops
+# (the CI ServiceAccount has no namespace/RBAC/Secret permission), so they are NOT
+# listed under `resources`.
+namespace: magnetite
+
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+# NOT in resources (applied out of band by ops, not by the CI ServiceAccount):
+#   - namespace.yaml   (cluster-scoped; CI has no namespace permission)
+#   - ci-rbac.yaml     (RBAC; CI has no rbac permission)
+#   - secret.example.yaml is a TEMPLATE — create the real Secret with the command above.
+
+# Pin the image centrally. CI rewrites `newName`/`newTag` here (sed) to the built
+# registry image + commit tag before `kubectl apply -k`. The default is a
+# non-resolvable `localhost/` ref, so a bare manual `kubectl apply` never silently
+# pulls `docker.io/library/magnetite-center`.
+images:
+  - name: localhost/magnetite-center
+    newName: localhost/magnetite-center
+    newTag: "latest"

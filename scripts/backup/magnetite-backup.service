@@ -1,0 +1,18 @@
+[Unit]
+Description=magnetite directory-store backup (cold copy of this node)
+Documentation=file:///usr/local/share/magnetite/backup/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# --- edit for your deployment ---
+Environment=MAGNETITE_SERVICE=magnetite-addc
+Environment=MAGNETITE_DB_PATH=/var/lib/magnetite/db
+Environment=MAGNETITE_BACKUP_DIR=/var/backups/magnetite
+# REQUIRED for disaster safety — a backup only on this node dies with it:
+Environment=MAGNETITE_BACKUP_OFFBOX=
+Environment=MAGNETITE_BACKUP_RETENTION_DAYS=14
+ExecStart=/usr/local/sbin/magnetite-backup.sh
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,14 @@
+# The committed runtime bundle is a build artifact — store every file byte-for-
+# byte (no EOL/text normalization) so a checkout matches what the build emits.
+dist/magnetite/** -text
+
+# The large files are versioned via Git LFS so repository history stays small
+# (the binary + wasm are regenerated on every build).
+dist/magnetite/magnetite-server filter=lfs diff=lfs merge=lfs -text
+dist/magnetite/site/pkg/*.wasm  filter=lfs diff=lfs merge=lfs -text
+
+# Shell scripts + systemd units run on Linux DCs — force LF so the shebang and
+# unit parsing never break from a CRLF checkout on a Windows clone.
+*.sh              text eol=lf
+*.service         text eol=lf
+*.timer           text eol=lf

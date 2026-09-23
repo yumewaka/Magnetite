@@ -1,0 +1,21 @@
+# Persistent storage for the embedded control-plane database (/app/data).
+# RocksDB is a single-writer store, so this is ReadWriteOnce and the Deployment
+# runs exactly one replica with a Recreate strategy. (Not needed in the shared-
+# SurrealDB HA model — there the state lives in the external database instead.)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: magnetite-center-data
+  labels:
+    app.kubernetes.io/name: magnetite-center
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # The cluster's StorageClass. Set explicitly (not left to a cluster default): with
+  # none, this PVC stays Pending and the pod stops at `FailedScheduling: pod has
+  # unbound immediate PersistentVolumeClaims`, an error that does not name the missing
+  # setting. `longhorn` is the StorageClass the cluster actually runs.
+  storageClassName: longhorn

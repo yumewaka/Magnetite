@@ -1,0 +1,16 @@
+# Cluster-internal Service for the Magnetite Center dashboard + API. Expose it
+# externally with an Ingress, or change `type` to LoadBalancer / NodePort.
+apiVersion: v1
+kind: Service
+metadata:
+  name: magnetite-center
+  labels:
+    app.kubernetes.io/name: magnetite-center
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: magnetite-center
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

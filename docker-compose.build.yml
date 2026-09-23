@@ -1,0 +1,23 @@
+# Phase 1 - BUILD the Linux artifacts inside a container (works with Docker &
+# Podman). The Rust build cache and the cargo registry are bind-mounted to HOST
+# directories (./.docker-cache/*), so they live on your normal disk instead of
+# the engine's virtual disk, and the produced Linux binary lands in ./dist.
+#
+#   docker compose -f docker-compose.build.yml run --rm --build builder
+#   podman compose -f docker-compose.build.yml run --rm builder   # build image first
+#
+# Result: ./dist/magnetite/{magnetite-server (Linux ELF), site/, magnetite.toml}
+# Delete ./.docker-cache anytime to reclaim the build cache from the host disk.
+services:
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.builder
+    image: magnetite-builder:latest
+    volumes:
+      - .:/src                                              # source tree (host)
+      - ./.docker-cache/target:/src/target                 # Rust target/ cache (host)
+      - ./.docker-cache/cargo-registry:/usr/local/cargo/registry  # crate registry (host)
+      - ./.docker-cache/cargo-git:/usr/local/cargo/git     # git deps cache (host)
+      - ./dist:/dist                                        # artifact output (host)
+    # command defaults to `bash scripts/docker-build.sh` (Dockerfile.builder CMD)

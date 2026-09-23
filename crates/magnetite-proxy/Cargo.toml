@@ -1,0 +1,31 @@
+[package]
+name = "magnetite-proxy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-core = { workspace = true }
+magnetite-db = { workspace = true }
+
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12"] }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+base64 = { workspace = true }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+instant-acme = { version = "0.8.5", default-features = false, features = ["ring", "hyper-rustls"] }
+rcgen = "0.13"
+# Parse the real notBefore/notAfter from an issued ACME certificate so renewal
+# timing follows the certificate itself, not an assumed 89-day window.
+x509-parser = "0.18"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,28 @@
+[package]
+name = "magnetite-krb5"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+picky-krb = "0.12.4"
+picky-asn1-der = "0.5.6"
+picky-asn1 = "0.10.1"
+serde = { workspace = true }
+# The legacy RC4 KERB_CHECKSUM_HMAC_MD5 (RFC 4757) a real S4U client (impacket,
+# Windows) uses for the PA-FOR-USER checksum even on AES tickets.
+hmac = "0.12"
+md-5 = "0.10"
+# RFC 3961/3962 AES256-CTS-HMAC-SHA1-96 primitives for the CFX Wrap checksum with
+# SIGN_ONLY associated data (picky's cipher has no AAD hook). `aes` supplies the
+# raw block cipher (CBC-CTS is composed by hand); `sha1` pairs with `hmac` 0.12.
+aes = "0.9"
+sha1 = "0.10"
+
+[dev-dependencies]
+tokio = { workspace = true }

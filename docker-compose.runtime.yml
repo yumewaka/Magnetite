@@ -1,0 +1,39 @@
+# Phase 2 - RUN the service from the prebuilt Linux artifacts in ./dist (built by
+# docker-compose.build.yml). No Rust toolchain and no build cache touch the
+# engine here: Dockerfile.prebuilt only COPYs ./dist/magnetite into a slim image.
+#
+#   docker compose -f docker-compose.runtime.yml up -d --build
+#   podman compose -f docker-compose.runtime.yml up -d --build
+#
+# The image bakes deploy/magnetite.container.toml (host 0.0.0.0). State persists
+# in the magnetite-data volume. To enable embedded DNS/DHCP/LDAP/Mail/Proxy
+# servers, uncomment their [domains.<d>.server] blocks in the config (rebuild the
+# dist) and the matching ports below.
+services:
+  magnetite:
+    build:
+      context: .
+      dockerfile: Dockerfile.prebuilt
+    image: magnetite:latest
+    container_name: magnetite
+    restart: unless-stopped
+    ports:
+      - "4000:4000"                # web UI + server functions
+      # - "53:53/udp"              # DNS
+      # - "53:53/tcp"              # DNS (TCP / AXFR)
+      # - "67:67/udp"              # DHCP
+      # - "389:389"                # LDAP (+ StartTLS)
+      # - "25:25"                  # SMTP
+      # - "8080:8080"              # reverse proxy (HTTP)
+      # - "8443:8443"              # reverse proxy (HTTPS)
+    volumes:
+      - magnetite-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  magnetite-data:

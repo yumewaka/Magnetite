@@ -1,0 +1,29 @@
+[package]
+name = "magnetite-addc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-core = { path = "../magnetite-core" }
+magnetite-krb5 = { path = "../magnetite-krb5" }
+magnetite-rpc = { path = "../magnetite-rpc" }
+magnetite-smb = { path = "../magnetite-smb" }
+# Directory backing: source AD principals from magnetite-db (SurrealDB). Also
+# provides the EmbeddedService trait the server uses to run the AD DC in-process.
+magnetite-db = { path = "../magnetite-db" }
+# The LDAP EmbeddedService — run it alongside the AD DC (sharing the DB) so the
+# standalone daemon mirrors what magnetite-server does for the directory.
+magnetite-ldap = { path = "../magnetite-ldap" }
+# Shared bearer-feed HTTP client for the self-contained SYSVOL replication pull.
+magnetite-feed = { path = "../magnetite-feed" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# Deriving a stable per-DC invocationId for the promotion orchestrator.
+md-5 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

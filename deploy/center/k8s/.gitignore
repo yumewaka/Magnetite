@@ -1,0 +1,2 @@
+# Local secret material for the kustomize secretGenerator — never commit it.
+secret.env

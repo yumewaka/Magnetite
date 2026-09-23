@@ -1,0 +1,69 @@
+# Magnetite Center — Docker Compose / Podman Compose deployment (single node).
+#
+#   # build the image once (context is the repo root):
+#   DOCKER_BUILDKIT=1 docker build -f crates/magnetite-center/Dockerfile -t magnetite-center:latest .
+#   # then, from this directory:
+#   CENTER_ADMIN_TOKEN=$(openssl rand -hex 32) docker compose up -d
+#   # Podman:  podman build ... ;  CENTER_ADMIN_TOKEN=... podman-compose up -d
+#
+# The dashboard + API listen on :5555. The embedded control-plane database lives
+# in the named volume `magnetite-center-data`, so state survives recreation.
+# For high availability run several replicas against a shared SurrealDB instead
+# (set CENTER_DB_URL) — see the commented `ha` example at the bottom.
+services:
+  magnetite-center:
+    image: magnetite-center:latest
+    container_name: magnetite-center
+    # Build inline instead of a pre-built image with:
+    #   docker compose build   (uncomment the block below)
+    # build:
+    #   context: ../..
+    #   dockerfile: crates/magnetite-center/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    environment:
+      # REQUIRED — the bearer token guarding every API route. Supply it from the
+      # environment (or a .env file next to this compose file); never commit it.
+      CENTER_ADMIN_TOKEN: "${CENTER_ADMIN_TOKEN:?set CENTER_ADMIN_TOKEN}"
+      CENTER_LISTEN: "0.0.0.0:5555"
+      CENTER_DB_PATH: "/app/data/center"
+      CENTER_POLL_SECS: "30"
+    volumes:
+      - magnetite-center-data:/app/data
+
+volumes:
+  magnetite-center-data:
+
+# ---------------------------------------------------------------------------
+# High-availability variant (sketch): run 2+ centers against one shared
+# SurrealDB so they elect a single leader (only the leader orchestrates
+# failover). Copy this into a separate compose file and adjust to taste. The
+# SurrealDB server version MUST match the surrealdb crate the binary was built
+# against.
+#
+# services:
+#   center-db:
+#     image: surrealdb/surrealdb:latest   # pin to the crate-matching version
+#     command: start --bind 0.0.0.0:8000 --user root --pass "$SURREAL_PASS" rocksdb:/data/center.db
+#     volumes: [ center-db-data:/data ]
+#   center-1:
+#     image: magnetite-center:latest
+#     environment:
+#       CENTER_ADMIN_TOKEN: "${CENTER_ADMIN_TOKEN}"
+#       CENTER_LISTEN: "0.0.0.0:5555"
+#       CENTER_DB_URL: "ws://center-db:8000"
+#       CENTER_ID: "center-1"
+#     ports: [ "5555:5555" ]
+#     depends_on: [ center-db ]
+#   center-2:
+#     image: magnetite-center:latest
+#     environment:
+#       CENTER_ADMIN_TOKEN: "${CENTER_ADMIN_TOKEN}"
+#       CENTER_LISTEN: "0.0.0.0:5555"
+#       CENTER_DB_URL: "ws://center-db:8000"
+#       CENTER_ID: "center-2"
+#     ports: [ "5556:5555" ]
+#     depends_on: [ center-db ]
+# volumes:
+#   center-db-data:

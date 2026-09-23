@@ -1,0 +1,67 @@
+# Magnetite is a single stateful process backed by an embedded RocksDB store.
+# Therefore: exactly one replica, Recreate strategy (never two pods on the same
+# volume), and the data PVC mounted read-write.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magnetite
+  labels:
+    app.kubernetes.io/name: magnetite
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: magnetite
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: magnetite
+    spec:
+      containers:
+        - name: magnetite
+          # Build and push this image to a registry your cluster can pull from:
+          #   docker build -t <registry>/magnetite:<tag> .
+          #   docker push  <registry>/magnetite:<tag>
+          image: magnetite:latest
+          imagePullPolicy: IfNotPresent
+          args: ["magnetite.toml"]
+          env:
+            - name: LEPTOS_SITE_ROOT
+              value: /app/site
+          ports:
+            - name: http
+              containerPort: 4000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/magnetite.toml
+              subPath: magnetite.toml
+              readOnly: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              memory: "1Gi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: magnetite-data
+        - name: config
+          configMap:
+            name: magnetite-config

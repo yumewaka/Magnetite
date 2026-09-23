@@ -1,0 +1,299 @@
+# Magnetite (integrated redesign) — application configuration.
+# This single file is the externalised AppConfig (05 §6 / 07 §3.10).
+# `sso` is optional: when omitted, Magnetite runs with local authentication only.
+
+[server]
+host = "127.0.0.1"
+port = 4000
+base_url = "http://localhost:4000"
+
+# Optional Single Sign-On (OIDC/PKCE). Remove this section to disable SSO login.
+[sso]
+issuer_url = "http://localhost:8080"
+client_id = "magnetite"
+# Never commit a real client secret. Supply it via the environment; the `${VAR:-default}`
+# form (config env-substitution) keeps a bare local run working while production sets
+# SSO_CLIENT_SECRET to the real value.
+client_secret = "${SSO_CLIENT_SECRET:-changeme-dev-only}"
+redirect_uri = "http://localhost:4000/auth/callback"
+scopes = ["openid", "profile", "email"]
+
+[policy]
+dashboard_refresh_secs = 30
+retention_days = 90
+password_min_length = 8
+
+# Management-plane agent API. When enabled, this server exposes /mgmt/identity and
+# /mgmt/health (JSON) for a magnetite-center control plane to inventory and monitor it
+# (and, in later phases, orchestrate failover). Server-to-server only — the token is the
+# only auth (constant-time compared), so keep it secret and reachable only by the center.
+# [mgmt]
+# enabled = true
+# token = "change-me-shared-mgmt-token"
+
+# Domain visibility / display. `enabled = false` hides the domain and stops new
+# operations against it (07 §5.2) while preserving existing data.
+[domains.dns]
+display_name = "DNS"
+icon = "dns"
+enabled = true
+
+# Embedded authoritative DNS server (09b §-1 / R5). Uncomment to run it in-process.
+# Changing these requires a restart (the socket is bound at startup). Binding to
+# :53 needs privileges; use e.g. 127.0.0.1:5353 for local testing.
+# [domains.dns.server]
+# listen = "0.0.0.0:53"
+# forwarders = ["1.1.1.1:53", "8.8.8.8:53"]  # out-of-zone names; empty = authoritative-only
+# query_log = true                            # write a query LogEntry per resolution (S-Logs)
+
+[domains.dhcp]
+display_name = "DHCP"
+icon = "dhcp"
+enabled = true
+
+# Embedded DHCPv4 server. Uncomment to run it in-process (needs privileges to
+# bind :67, and works on a directly-attached L2 segment or via a relay agent).
+# [domains.dhcp.server]
+# listen = "0.0.0.0:67"
+# query_log = true   # log each OFFER/ACK/NAK/RELEASE to S-Logs
+
+[domains.ldap]
+display_name = "LDAP"
+icon = "ldap"
+enabled = true
+# Directory base DN / naming context. Set this before first run; it seeds the
+# directory root and is then fixed (changing it later would orphan the tree).
+base_dn = "dc=example,dc=com"
+
+# Embedded LDAPv3 directory server. Uncomment to run it in-process (binding :389
+# needs privileges; use e.g. 127.0.0.1:3389 for local testing). Serves simple/
+# anonymous bind and search (base/one/subtree + filters) over the shared
+# directory; writes go through the web UI. StartTLS/LDAPS and ACL are deferred.
+# [domains.ldap.server]
+# listen = "0.0.0.0:389"
+# query_log = true   # log each bind/search to S-Logs
+# tls_cert_name = "ldap"   # certificate presented on StartTLS (omit to disable)
+# RFC 4533 syncrepl consumer: replicate an upstream LDAP directory (another
+# Magnetite or OpenLDAP) into this instance. Bind credentials stay server-side.
+# [domains.ldap.server.consumer]
+# enabled = true
+# provider_url = "ldap://primary-host:389"
+# bind_dn = "cn=replicator,dc=example,dc=com"   # empty ⇒ anonymous
+# bind_password = "change-me"
+# base_dn = "dc=example,dc=com"   # defaults to this instance's base_dn
+# interval_secs = 30
+# mode = "syncrepl"   # RFC 4533 (OpenLDAP). Use "ad-dirsync" for Samba AD / Windows AD.
+# For Active Directory / Samba AD DC (which does NOT speak RFC 4533 syncrepl),
+# use the DirSync mode with an account authorized to read the directory:
+# [domains.ldap.server.consumer]
+# enabled = true
+# mode = "ad-dirsync"
+# provider_url = "ldap://dc.corp.example.com:389"
+# bind_dn = "CN=svc-magnetite,CN=Users,DC=corp,DC=example,DC=com"
+# bind_password = "change-me"
+# base_dn = "DC=corp,DC=example,DC=com"
+# interval_secs = 30
+# dirsync_flags = 8192   # PUBLIC_DATA_ONLY: still needs the Replicating right on Samba
+# NOTE: Samba AD DC requires the "Replicating Directory Changes" right for DirSync
+# even with PUBLIC_DATA_ONLY. For a plain read-only account, use USN polling
+# instead — an ordinary paged search that tracks uSNChanged (adds/modifies only):
+# [domains.ldap.server.consumer]
+# enabled = true
+# mode = "ad-usn"
+# provider_url = "ldap://dc.corp.example.com:389"
+# bind_dn = "svc-magnetite@corp.example.com"   # UPN works for AD simple bind
+# bind_password = "change-me"
+# base_dn = "DC=corp,DC=example,DC=com"
+# interval_secs = 30
+# Normalization: AD user/group → inetOrgPerson/groupOfNames, uid ← sAMAccountName,
+# enabled ← userAccountControl. Optionally add POSIX attrs (for sssd/nss):
+# posix_mapping = true
+# posix_uid_base = 100000   # uidNumber = base + SID RID
+# posix_gid_base = 100000   # gidNumber = base + primaryGroupID (users) / RID (groups)
+# Deletion sync (ad-usn): detect removals by periodic full-enumeration
+# reconciliation — needs only ordinary read access (no AD tombstone rights).
+# reconcile_deletions = true
+# reconcile_every = 20      # run reconciliation every 20th incremental pass
+
+[domains.mail]
+display_name = "Mail"
+icon = "mail"
+enabled = true
+
+# Embedded SMTP receiving server. Uncomment to run it in-process (needs
+# privileges to bind :25). Accepts mail for hosted domains/users/aliases and
+# stores it. The POP3/IMAP retrieval ports are taken from the mail server config
+# (Mail → protocols → pop3/imap). TLS: set the mail config's `tls_cert_name` to a
+# certificate (with private key). That enables both implicit TLS (enable the
+# smtps/imaps/pop3s protocols) and STARTTLS/STLS on the plaintext SMTP/POP3/IMAP
+# ports, plus SMTP AUTH LOGIN/PLAIN (offered only over TLS). Outbound relay
+# (external send) is deferred. STARTTLS/AUTH need no extra config beyond the cert.
+# [domains.mail.server]
+# listen = "0.0.0.0:25"
+# query_log = true   # log each accepted message to S-Logs
+# Outbound relay for authenticated submissions to non-hosted domains. Omit this
+# block to deliver directly to each recipient's domain on port 25. Secrets here
+# stay server-side (this file is never sent to clients). Plaintext transport only
+# for now (TLS to the relay is deferred).
+# [domains.mail.server.relay]
+# host = "smarthost.example.com"
+# port = 25
+# username = "relay-user"   # optional SMTP AUTH to the smarthost
+# password = "relay-pass"
+# Mailbox replication (Step 2 HA, Magnetite-to-Magnetite). The `secret` is a
+# shared bearer token gating the feed at /repl/mail (server-side only, never
+# projected). On the PRIMARY, set enabled + secret and omit primary_url. On the
+# SECONDARY, also set primary_url to pull the primary's mailbox changes.
+# [domains.mail.server.replication]
+# enabled = true
+# secret = "change-me-shared-token"
+# primary_url = "http://primary-host:4000"   # secondary only
+# interval_secs = 30
+
+[domains.proxy]
+display_name = "Proxy"
+icon = "proxy"
+enabled = true
+
+# Embedded reverse proxy. Uncomment to run it in-process. Requests are routed by
+# Host header to a virtual host (see the Proxy screens). Set `tls_listen` to also
+# terminate HTTPS (HTTP/2 via ALPN): TLS-enabled vhosts present their certificate
+# (with private key) by SNI. WebSocket/Upgrade passthrough and http/https upstreams
+# are supported. `tcp_listen` adds raw L4/TCP stream forwarding (RDP/PostgreSQL/…):
+# each port forwards to a `Tcp`-mode vhost, routed by TLS SNI (ssl_preread — several
+# hosts on one port) or by the listen port.
+# [domains.proxy.server]
+# listen = "0.0.0.0:8080"
+# tls_listen = "0.0.0.0:8443"
+# tcp_listen = "0.0.0.0:3389,0.0.0.0:5432"   # RDP + PostgreSQL streams
+#   L4 routing note: a TLS stream is routed by SNI from a single ClientHello preread, so
+#   several TLS hosts CAN share one tcp_listen port. A NON-TLS protocol (RDP, PostgreSQL,
+#   …) has no SNI, so it is routed by the listen PORT ALONE — one such backend per port.
+#   To expose several non-TLS backends, give each its own port (as above), not one shared
+#   port. The preread is a single read of the first packet; a client that dribbles the
+#   ClientHello across packets may fall back to port routing.
+# forward_listen = "0.0.0.0:3128"            # HTTP forward proxy (absolute-URI + CONNECT)
+# max_body_bytes = 524288000                 # reject bodies over 500 MB (413); also caps the forward proxy
+# query_log = true   # write an access log line per request to S-Logs
+#
+# Automatic TLS (ACME / Let's Encrypt, HTTP-01). When enabled, the proxy obtains and
+# renews a certificate for `domains` and stores it under `certificate_name` in the cert
+# store — point a TLS vhost's certificate at that name. The plain HTTP `listen` port must
+# be reachable from the CA on port 80 (each domain must resolve to this host). Use
+# `staging = true` while testing to avoid Let's Encrypt production rate limits.
+# [domains.proxy.server.acme]
+# enabled = true
+# staging = false                     # true = Let's Encrypt staging (untrusted certs)
+# contact_email = "admin@example.com" # registered with the CA for expiry notices
+# domains = ["www.example.com", "example.com"]
+# certificate_name = "acme"           # cert-store name a TLS vhost references (default "acme")
+# renew_before_days = 30              # renew when fewer than this many days remain
+# directory_url = "https://acme-v02.api.letsencrypt.org/directory"  # override CA (e.g. Pebble)
+#
+# Proxy config replication (Tier C): keep a second node's reverse-proxy config
+# (vhosts, certificates incl. private keys, ACLs, IP blocks) in sync. Same shape as
+# the mail/DHCP feeds — the `secret` gates the snapshot at /repl/proxy (server-side
+# only). On the PRIMARY set enabled + secret and omit primary_url. On the SECONDARY
+# also set primary_url; it replaces its whole proxy config with the primary's and,
+# to avoid double-issuance, does NOT run its own ACME (certs arrive via the feed).
+# SECURITY: this snapshot carries TLS *private keys*. The feed is bearer-gated but
+# the poller does not verify the primary's TLS cert, so only enable it over a
+# trusted network (or a private link/VPN) and keep the `secret` strong.
+# [domains.proxy.server.replication]
+# enabled = true
+# secret = "change-me-shared-token"
+# primary_url = "http://primary-host:4000"   # secondary only
+# interval_secs = 30
+
+[domains.k8s]
+display_name = "Container / K8s"
+icon = "k8s"
+enabled = true
+
+[domains.sso]
+display_name = "SSO"
+icon = "sso"
+enabled = true
+
+# SSO config replication (Tier C): keep a second node's SSO config (identity
+# providers, OIDC clients, issuer signing keys — all with secrets) in sync. Same
+# shape as the mail/proxy feeds — the `secret` gates the snapshot at /repl/sso.
+# Sessions are NOT replicated (they re-establish on failover). Replicating the
+# signing keys keeps the JWKS consistent so a token signed by one node verifies on
+# another. A secondary that also runs the SSO issuer loads its keyring at startup /
+# on rotation, so restart it after a key change to pick up a replicated active key.
+# SECURITY: this snapshot carries issuer *signing keys* and provider/client secrets.
+# The feed is bearer-gated but the poller does not verify the primary's TLS cert, so
+# only enable it over a trusted network (or a private link/VPN) and keep `secret` strong.
+# [domains.sso.server.replication]
+# enabled = true
+# secret = "change-me-shared-token"
+# primary_url = "http://primary-host:4000"   # secondary only
+# interval_secs = 30
+
+[domains.watch]
+display_name = "Watch"
+icon = "watch"
+enabled = true
+
+# Embedded monitoring collector. Uncomment to run it in-process. Unlike the other
+# embedded servers it binds no socket: it periodically TCP-probes each monitored
+# host's reachability (recording reachable/latency_ms metrics + host status) and
+# evaluates monitor rules into alerts (suppressed for hosts under maintenance).
+# [domains.watch.server]
+# interval_secs = 60   # seconds between collector passes (min 5)
+# probe_port = 22      # TCP port used for the per-host reachability probe
+# query_log = true     # log each probe to S-Logs
+
+[domains.addc]
+display_name = "AD DC"
+icon = "ldap"
+enabled = true
+
+# Embedded Active Directory domain controller: Kerberos KDC + SMB/SYSVOL + RPC
+# (SAMR / LSA / DRSUAPI). Uncomment BOTH tables below to run it in-process. The
+# empty [domains.addc.server.addc] table is what switches the DC on — every field
+# under it has a well-known default, so an empty table already binds 88/445/1025/
+# 1027. Principals come from the shared database (alice/bob are seeded on first
+# run); the realm's Kerberos keys, the cifs/host service keys and the machine
+# password are all derived server-side and never leave the process. Changing these
+# requires a restart (the sockets bind at startup).
+#
+# The default ports are privileged — run as root, or override with high ports for
+# local testing (e.g. kdc_listen = "0.0.0.0:8888").
+# [domains.addc.server]
+# [domains.addc.server.addc]
+# realm      = "EXAMPLE.COM"    # Kerberos realm
+# kdc_listen = "0.0.0.0:88"     # KDC (kinit, TGS)
+# smb_listen = "0.0.0.0:445"    # SMB: SYSVOL + IPC$ pipes (samr, lsarpc, netlogon)
+# rpc_listen = "0.0.0.0:1025"   # RPC/SAMR over ncacn_ip_tcp
+# drs_listen = "0.0.0.0:1027"   # DRSUAPI (Kerberos-authenticated DCSync)
+# kpasswd_listen = "0.0.0.0:464" # Kerberos Change/Set Password (RFC 3244, UDP+TCP)
+# dc_ipv4    = "127.0.0.1"      # IP published in the DC-locator DNS records
+#
+# On startup the DC seeds the DC-locator DNS records (_ldap/_kerberos/_gc SRV +
+# the magnetite.<domain> A record) into the DNS zone for the realm's domain, so a
+# Windows client pointed at magnetite-dns can find the DC. Set dc_ipv4 to the
+# address the client should reach the DC at, and enable [domains.dns.server].
+#
+# Inbound AD DRS replication (DCSync) run FROM magnetite-server — pull directory
+# changes from one or more upstream DCs (Samba or magnetite) into the shared DB on
+# an interval, so a Web-UI deployment stays in sync WITHOUT the standalone
+# magnetite-addc binary. Prefer a keytab over a cleartext password in production.
+# [domains.addc.server.addc.replication]
+# enabled       = true
+# kdc           = "10.69.134.30:88"          # upstream KDC for replication tickets
+# realm         = "EXAMPLE.COM"              # defaults to the AD DC realm above
+# user          = "Administrator"            # account holding replication rights
+# password      = "…"                        # dev/PoC only — prefer keytab
+# keytab        = "/etc/magnetite/repl.keytab" # production: no cleartext credential
+# nc_dn         = "dc=example,dc=com"        # defaults to the realm as dc=…
+# extra_ncs     = ["CN=Configuration,DC=example,DC=com", "CN=Schema,CN=Configuration,DC=example,DC=com"]
+# interval_secs = 300
+# # One [[…upstreams]] block per source DC (multi = redundancy / mesh):
+# [[domains.addc.server.addc.replication.upstreams]]
+# drs = "10.69.134.30:1027"                  # source DRSUAPI endpoint
+# spn = "ldap/dc1.example.com"               # DRS service SPN to request a ticket for
+# [[domains.addc.server.addc.replication.upstreams]]
+# drs = "10.69.134.31:1027"
+# spn = "ldap/dc2.example.com"

@@ -1,0 +1,52 @@
+[package]
+name = "magnetite-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-core = { workspace = true }
+magnetite-db = { workspace = true }
+magnetite-dns = { workspace = true }
+magnetite-dhcp = { workspace = true }
+magnetite-proxy = { workspace = true }
+magnetite-mail = { workspace = true }
+magnetite-ldap = { workspace = true }
+magnetite-watch = { workspace = true }
+magnetite-sso = { workspace = true }
+magnetite-addc = { workspace = true }
+magnetite-feed = { workspace = true }
+magnetite-notify = { workspace = true }
+magnetite-federation = { workspace = true }
+magnetite-app = { workspace = true, features = ["ssr"] }
+
+leptos = { workspace = true, features = ["ssr"] }
+leptos_axum = { workspace = true }
+leptos_router = { workspace = true, features = ["ssr"] }
+server_fn = { workspace = true }
+
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tower-cookies = { workspace = true }
+tokio = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+# Install the process-level rustls CryptoProvider (ring) once at startup: the
+# embedded TLS paths pass a provider explicitly, but instant-acme (proxy ACME)
+# relies on the process default, which otherwise panics on first issuance.
+rustls = { workspace = true }
+
+# Replication feeds (mail / DHCP / SYSVOL HA): serve the change feeds (axum);
+# the pull side's HTTP client lives in `magnetite-feed`.
+
+[dev-dependencies]
+# Cross-cutting integration tests (tests/) exercise the shared DB and the
+# socket-based embedded servers end-to-end (09b §-1, 05 §6.6).
+tempfile = "3"
+hickory-proto = { workspace = true }

@@ -1,0 +1,29 @@
+[package]
+name = "magnetite-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-core = { workspace = true }
+# AD principal key material: Kerberos AES256 long-term key derivation (RFC 3962)
+# and the NT hash (MD4).
+magnetite-krb5 = { path = "../magnetite-krb5" }
+# GPO provisioning (GPT.INI + MS-GPREG Registry.pol + GPC attributes) for the AD DC
+# Group Policy management API.
+magnetite-gpo = { path = "../magnetite-gpo" }
+md4 = "0.10"
+
+surrealdb = { workspace = true }
+argon2 = { workspace = true }
+base64 = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

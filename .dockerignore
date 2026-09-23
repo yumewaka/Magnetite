@@ -1,0 +1,8 @@
+# Keep the build context small and reproducible.
+/target
+/dist
+/data
+/.docker-cache
+**/*.log
+.git
+node_modules

@@ -1,0 +1,35 @@
+# Runtime-only image: NO compilation happens in the container, so no Rust build
+# cache ever touches the container engine's storage. It simply packages a
+# distribution folder you built on the host with scripts/package.sh (or .ps1).
+#
+#   # 1. Build the dist on a LINUX host (or WSL) so the binary is a Linux ELF:
+#   ./scripts/package.sh            # -> dist/magnetite/{magnetite-server,site,...}
+#   # 2. Package it into a slim runtime image:
+#   docker build -f Dockerfile.prebuilt -t magnetite:latest .
+#
+# IMPORTANT: dist/magnetite/magnetite-server must be a Linux (glibc) binary that
+# matches debian:bookworm-slim. A Windows .exe from package.ps1 will NOT run
+# here — use the in-container build (Dockerfile) on Windows, or build the dist
+# under WSL/Linux/CI for this path.
+
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates libssl3 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Point at a different dist folder with --build-arg DIST=path/to/dist.
+ARG DIST=dist/magnetite
+
+WORKDIR /app
+COPY ${DIST}/magnetite-server /app/magnetite-server
+COPY ${DIST}/site /app/site
+COPY ${DIST}/magnetite.toml /app/magnetite.toml
+RUN chmod +x /app/magnetite-server
+
+ENV LEPTOS_SITE_ROOT=/app/site
+VOLUME ["/app/data"]
+EXPOSE 4000
+
+ENTRYPOINT ["/app/magnetite-server"]
+CMD ["magnetite.toml"]

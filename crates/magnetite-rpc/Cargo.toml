@@ -1,0 +1,26 @@
+[package]
+name = "magnetite-rpc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+# Non-poisoning locks for the in-memory directory/SAMR/Netlogon state so a panic
+# in one request cannot poison a lock and crash every subsequent request.
+parking_lot = { workspace = true }
+# Kerberos RPC authentication (GSS-API): AP-REQ verify, AP-REP mutual auth,
+# SPNEGO framing, and RFC 4121 MIC message protection.
+magnetite-krb5 = { path = "../magnetite-krb5" }
+# Netlogon secure-channel crypto (MS-NRPC): NT hash (MD4), HMAC-SHA256 session
+# key, AES-128-CFB8 credentials. Pure-Rust RustCrypto stack.
+aes = "0.8"
+md4 = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+# DRSUAPI replicated-secret encryption (MS-DRSR §5.16.4): MD5+RC4 salt wrap and
+# a DES-per-RID hash layer.
+des = "0.8"
+md-5 = "0.10"

@@ -1,0 +1,42 @@
+# External entry point for the Magnetite Center dashboard + JSON API.
+#
+# This is the CONTROL PLANE: every API call carries the admin bearer token
+# (`Authorization: Bearer <CENTER_ADMIN_TOKEN>`), and it can promote/demote and
+# repoint DNS for the whole fleet. Treat exposure accordingly:
+#   - Restrict who can reach it (IP allow-list / private ingress / VPN). It is not a
+#     public app.
+#   - Serve it over TLS only. The bearer token is sent on every request, so a
+#     plaintext hop leaks full fleet control.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: magnetite-center
+  labels:
+    app.kubernetes.io/name: magnetite-center
+  annotations:
+    # Match the app's own long-poll / failover calls (default 60s is too short).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    # Force HTTPS. Without it a client may send the admin bearer token over plain
+    # HTTP on the first request (a 301 comes too late — the header is already sent),
+    # handing an eavesdropper full control of the fleet.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # proxy-body-size 1m equals the default (harmless to keep). No uploads hit this.
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+spec:
+  ingressClassName: nginx
+  # magnetite-tls is the shared cluster cert Secret that cert-sync refreshes daily —
+  # reference it (do NOT rename), or renewed certs stop reaching this Ingress.
+  tls:
+    - hosts: [mag-center.yumewaka.pgw.jp]
+      secretName: magnetite-tls
+  rules:
+    - host: mag-center.yumewaka.pgw.jp
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: magnetite-center
+                port:
+                  name: http

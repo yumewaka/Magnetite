@@ -1,0 +1,26 @@
+# Deploy Magnetite:  kubectl apply -k deploy/k8s
+#
+# The application config is generated from the same file the Compose deployment
+# uses, so there is a single source of truth. Changing it rolls the pod (the
+# generated ConfigMap name carries a content hash).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# namespace: magnetite   # uncomment to pin a namespace (create it first)
+
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+configMapGenerator:
+  - name: magnetite-config
+    files:
+      - magnetite.toml=../magnetite.container.toml
+
+# Pin the image tag centrally (build & push it first):
+# images:
+#   - name: magnetite
+#     newName: your-registry.example.com/magnetite
+#     newTag: "0.1.0"

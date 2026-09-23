@@ -1,0 +1,72 @@
+# CI ServiceAccount + Role for deploying Magnetite Center from GitLab CI.
+#
+# Applied OUT OF BAND by ops (creating RBAC needs privileges the CI SA itself does
+# not have), so it is NOT listed in kustomization.yaml `resources`. The KUBECONFIG
+# stored in GitLab CI/CD variables authenticates as this ServiceAccount.
+#
+# Deliberately minimal:
+#   * Manage the workloads the pipeline rolls out (Deployment/Service/PVC/Ingress).
+#   * Read enough to watch a rollout (replicasets/pods/pods log/events).
+#   * NO Secret access — the admin token and any encryption keys stay outside CI.
+#   * NO `delete` — a selector-immutable change (`field is immutable`) needs a human
+#     to delete the Deployment first (see deploy/center/README.md); the PVC survives,
+#     so no data is lost.
+#   * NO namespace verbs — the `magnetite` namespace is pre-created by ops.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab-ci
+  namespace: magnetite
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitlab-ci-deployer
+  namespace: magnetite
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log", "events"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitlab-ci-deployer
+  namespace: magnetite
+subjects:
+  - kind: ServiceAccount
+    name: gitlab-ci
+    namespace: magnetite
+roleRef:
+  kind: Role
+  name: gitlab-ci-deployer
+  apiGroup: rbac.authorization.k8s.io
+---
+# A long-lived ServiceAccount token for the CI KUBECONFIG. Since Kubernetes 1.24 a
+# SA has no auto-generated token Secret, so create one explicitly (the control plane
+# populates `data.token`). Ops builds the GitLab KUBECONFIG variable from this token.
+# Kept here for reproducibility — applied out of band by ops with the rest of this file.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gitlab-ci-token
+  namespace: magnetite
+  annotations:
+    kubernetes.io/service-account.name: gitlab-ci
+type: kubernetes.io/service-account-token

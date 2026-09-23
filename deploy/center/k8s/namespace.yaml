@@ -1,0 +1,15 @@
+# Namespace for the Magnetite Center control plane. This is the `magnetite`
+# namespace the control plane actually runs in; kustomization.yaml pins every
+# workload into it via `namespace: magnetite`.
+#
+# Applied OUT OF BAND by ops (with cluster privileges), NOT by CI — a Namespace is
+# cluster-scoped and the CI ServiceAccount (see ci-rbac.yaml) is granted no
+# namespace permission, so this file is deliberately kept out of the kustomization
+# `resources` list. Create it once:
+#   kubectl apply -f deploy/center/k8s/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: magnetite
+  labels:
+    app.kubernetes.io/name: magnetite-center

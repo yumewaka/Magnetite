@@ -1,0 +1,16 @@
+# Persistent storage for the embedded database (/app/data). RocksDB is a
+# single-writer store, so this is ReadWriteOnce and the Deployment runs exactly
+# one replica with a Recreate strategy.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: magnetite-data
+  labels:
+    app.kubernetes.io/name: magnetite
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName: standard   # set to your cluster's storage class if needed

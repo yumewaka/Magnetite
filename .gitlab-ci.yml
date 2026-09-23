@@ -1,0 +1,222 @@
+# GitLab CI/CD for the magnetite monorepo — ONE pipeline, two deployables:
+#   * CENTER  (control plane) → Kubernetes, namespace `magnetite`  (auto deploy)
+#   * SERVER  (the platform body: SSO/LDAP/DNS/Mail) → Podman Quadlet on .30 + .31
+#            (MANUAL deploy, one job per node so they roll independently)
+#
+# `rules:changes` splits the two: a center-only change never rebuilds the server (and
+# vice-versa) on the shared runner. Shared crates (magnetite-feed) and Cargo.lock /
+# rust-toolchain.toml sit in BOTH change sets.
+#
+# The non-obvious things every repo here hit are baked in: (a) a deploy image WITH a
+# shell (distroless kubectl has none); (b) `docker build --provenance=false --sbom=false`
+# (the registry rejects attestation → `blob unknown`); (c) `kubectl apply -k
+# --dry-run=server` before the real apply; (d) `rules:` one pipeline per change; and the
+# shell `sed` lives in a YAML block scalar (a plain scalar cannot contain `": "`). The
+# shared runner is `executor=docker, privileged=false` with the host docker socket → NO
+# dind, `docker:27-cli` talks to the host daemon (its BuildKit cache persists).
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  # A job image with a shell that also carries kubectl AND ssh (alpine/k8s). Used by
+  # both the center k8s deploy and the server ssh deploy.
+  OPS_IMAGE: "docker.io/alpine/k8s:1.35.8"
+  CENTER_DOCKERFILE: "crates/magnetite-center/Dockerfile"
+  SERVER_DOCKERFILE: "Dockerfile"
+  K8S_DIR: "deploy/center/k8s"
+
+# ---- reusable rule fragments ----------------------------------------------
+# Paths that belong to each deployable. magnetite-feed + Cargo.lock + rust-toolchain
+# are shared, so they appear in BOTH (a change there rebuilds both).
+.center_changes: &center_changes
+  - crates/magnetite-center/**/*
+  - crates/magnetite-feed/**/*
+  - deploy/center/**/*
+  - Cargo.lock
+  - rust-toolchain.toml
+# NOTE (C-1): GitLab does NOT interpret `!negation` in `rules:changes` — a `!path`
+# entry matches a file literally named that, i.e. never. So we do not try to carve
+# the center out of `crates/**/*`; a center-only change also rebuilds the body. Cheap
+# insurance, and it dovetails with C-2 below (the body image must exist for any
+# default-branch SHA a deploy job could be pressed on).
+.server_changes: &server_changes
+  - "crates/**/*"
+  - "deploy/**/*"
+  - Cargo.lock
+  - Dockerfile
+  - rust-toolchain.toml
+  - magnetite.toml
+
+# build/test rules: one pipeline per change (never both branch and MR), and only when
+# the relevant paths changed.
+.center_rules: &center_rules
+  - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+    when: never
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    changes: *center_changes
+  - if: $CI_COMMIT_BRANCH
+    changes: *center_changes
+.server_rules: &server_rules
+  - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+    when: never
+  # C-2: on the default branch ALWAYS build+test the body, regardless of what
+  # changed, so an image tagged with that commit's SHA always exists — otherwise a
+  # README-only commit would skip the build and `deploy:mag*` (which is not
+  # change-gated) would `podman pull …:<sha>` a 404.
+  - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    changes: *server_changes
+  - if: $CI_COMMIT_BRANCH
+    changes: *server_changes
+
+# ===========================================================================
+# CENTER (Kubernetes)
+# ===========================================================================
+build:center:
+  stage: build
+  image: docker:27-cli
+  rules: *center_rules
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    # `/center` subpath so the center image does not collide with the body's
+    # ($CI_REGISTRY_IMAGE). No `:latest` — every image is pinned to its commit SHA.
+    - docker build --provenance=false --sbom=false --target runtime -f "$CENTER_DOCKERFILE" -t "$CI_REGISTRY_IMAGE/center:$IMAGE_TAG" .
+    - docker push "$CI_REGISTRY_IMAGE/center:$IMAGE_TAG"
+
+test:center:
+  stage: test
+  image: docker:27-cli
+  rules: *center_rules
+  script:
+    - docker build --provenance=false --sbom=false --target test -f "$CENTER_DOCKERFILE" .
+
+deploy:center:
+  stage: deploy
+  image: "$OPS_IMAGE"
+  # Auto-deploy the center to k8s, but only on the default branch and only when center
+  # paths changed (never from a feature branch).
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes: *center_changes
+  environment:
+    name: center
+    url: https://mag-center.yumewaka.pgw.jp
+  script:
+    # Point kustomize at the freshly-built image (block scalar so the `:`/quotes in the
+    # sed are literal), validate server-side, then apply.
+    - |
+      sed -i "s|newName: localhost/magnetite-center|newName: $CI_REGISTRY_IMAGE/center|; s|newTag: \"latest\"|newTag: \"$IMAGE_TAG\"|" "$K8S_DIR/kustomization.yaml"
+    - kubectl apply -k "$K8S_DIR" --dry-run=server
+    - kubectl apply -k "$K8S_DIR"
+    - kubectl -n magnetite rollout status deployment/magnetite-center --timeout=120s
+
+# ===========================================================================
+# SERVER — the platform body (Podman Quadlet on .30 / .31)
+# ===========================================================================
+build:server:
+  stage: build
+  image: docker:27-cli
+  rules: *server_rules
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    # The body image uses $CI_REGISTRY_IMAGE directly (center is under /center). SHA tag
+    # only — no `:latest`.
+    - docker build --provenance=false --sbom=false --target runtime -f "$SERVER_DOCKERFILE" -t "$CI_REGISTRY_IMAGE:$IMAGE_TAG" .
+    - docker push "$CI_REGISTRY_IMAGE:$IMAGE_TAG"
+
+test:server:
+  stage: test
+  image: docker:27-cli
+  rules: *server_rules
+  # Whole-workspace checks (21 crates) via the body Dockerfile's `test` stage — heavy,
+  # but this is the platform body. First runs may surface fmt/clippy findings to fix.
+  script:
+    - docker build --provenance=false --sbom=false --target test -f "$SERVER_DOCKERFILE" .
+
+# The OPS_IMAGE (alpine/k8s) ships kubectl but NOT an ssh client, and the runner's
+# own host key is not visible inside the job container (B-1/B-2). So install the ssh
+# client and lay down the CI-only deploy key from the `MAG_SSH_KEY` File variable, and
+# pin the host key with ssh-keyscan (which is why `-o StrictHostKeyChecking=no` is gone
+# from the ssh line — we now trust known_hosts instead of blindly accepting).
+.deploy_before: &deploy_before
+  - apk add --no-cache openssh-client
+  - install -m 700 -d ~/.ssh
+  - install -m 600 "$MAG_SSH_KEY" ~/.ssh/id_ed25519
+  - ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
+
+# Deploy to ONE node by rewriting the Quadlet Image= line and restarting. MANUAL and
+# per-node so .30 and .31 roll independently (a shared `resource_group` also serializes
+# them so both can never restart at once). Pull-then-swap keeps downtime to the restart.
+# Only the Image= line is touched — NODE_DSA_ID / FSMO_OWNERS / backup path in the
+# .container are host-specific and left alone. Registry auth is pre-placed on each host
+# (/root/.config/containers/auth.json).
+.deploy_script: &deploy_script
+  - |
+    ssh root@"$TARGET_HOST" bash -s <<EOS
+    set -euo pipefail
+    IMG="$CI_REGISTRY_IMAGE:$IMAGE_TAG"
+    UNIT=/etc/containers/systemd/magnetite.container
+    # 1. Pull first — still serving the old image, no downtime yet.
+    podman pull "\$IMG"
+    # 2. Back up the current unit for a host-side rollback.
+    cp -a "\$UNIT" "\$UNIT.bak-\$(date +%Y%m%d-%H%M%S)"
+    # 3. Rewrite ONLY the Image= line.
+    sed -i "s|^Image=.*|Image=\$IMG|" "\$UNIT"
+    # 4. Swap in — downtime starts here.
+    systemctl daemon-reload
+    systemctl restart magnetite.service
+    # 5. Watch it come up (TimeoutStartSec=300 → 60 x 5s). Poll /readyz, NOT /healthz:
+    #    /healthz is liveness only (200 the moment the HTTP stack answers, no I/O), so it
+    #    would flip green before the DB opened or a served domain bound. /readyz returns
+    #    200 only once the DB answers and no served domain is in Error, so a bad rollout
+    #    (Restart=always loops it) fails the job instead of passing on a half-up node.
+    for i in \$(seq 1 60); do
+      if curl -fsS -o /dev/null http://127.0.0.1:4000/readyz; then
+        echo "magnetite is ready: \$IMG"; exit 0
+      fi
+      sleep 5
+    done
+    echo "readyz did not come up in time"; systemctl status magnetite.service --no-pager | tail -20
+    curl -sS http://127.0.0.1:4000/readyz || true
+    exit 1
+    EOS
+
+# resource_group serializes mag1 + mag2: GitLab runs at most one job of the group at a
+# time, so LDAP/DNS on both nodes can never be down together even if an operator presses
+# both. environment.url is the node's own probe (not the LDAP domain name) so the
+# environment link points somewhere useful per node.
+deploy:mag1:
+  stage: deploy
+  image: "$OPS_IMAGE"
+  resource_group: magnetite-cluster
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  environment:
+    name: magnetite/mag1
+    url: http://10.69.134.30:4000/
+  variables:
+    TARGET_HOST: "10.69.134.30"
+  before_script: *deploy_before
+  script: *deploy_script
+
+deploy:mag2:
+  stage: deploy
+  image: "$OPS_IMAGE"
+  resource_group: magnetite-cluster
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  environment:
+    name: magnetite/mag2
+    url: http://10.69.134.31:4000/
+  variables:
+    TARGET_HOST: "10.69.134.31"
+  before_script: *deploy_before
+  script: *deploy_script

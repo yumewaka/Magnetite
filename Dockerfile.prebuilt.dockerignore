@@ -1,0 +1,9 @@
+# Build context for Dockerfile.prebuilt. BuildKit uses this file (named after
+# the Dockerfile) instead of .dockerignore for that build. Unlike the main
+# .dockerignore it does NOT exclude /dist, because this image packages it.
+/target
+/data
+/.docker-cache
+**/*.log
+.git
+node_modules

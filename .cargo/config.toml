@@ -1,0 +1,16 @@
+# Windows link configuration.
+#
+# The fully-monomorphised Leptos shell view (sidebar + header + outlet + toasts)
+# emits a large amount of debug info; when the SSR binary and the WASM bundle are
+# linked, the resulting PDB overflows the default 4 KiB page size and rust-lld
+# fails with "try setting a larger /pdbpagesize". Enlarging the page size keeps
+# full debug info while giving the PDB room to grow.
+[target.'cfg(windows)']
+rustflags = ["-C", "link-arg=/pdbpagesize:16384"]
+
+# WASM hydrate bundle. The dev profile's full debug info (DWARF) for the large
+# shell view is enough to crash the wasm linker (rust-lld: access violation
+# 0xc0000005). The browser bundle does not need native debug info, so drop it for
+# the wasm target — this both avoids the linker crash and shrinks the artifact.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "debuginfo=0"]

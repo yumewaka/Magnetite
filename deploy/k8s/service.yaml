@@ -1,0 +1,16 @@
+# Cluster-internal Service for the web UI. Expose it externally via the Ingress
+# (ingress.yaml), or change `type` to LoadBalancer / NodePort.
+apiVersion: v1
+kind: Service
+metadata:
+  name: magnetite
+  labels:
+    app.kubernetes.io/name: magnetite
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: magnetite
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

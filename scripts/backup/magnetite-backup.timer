@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily magnetite directory backup
+
+[Timer]
+# STAGGER across nodes so both DCs are never stopped at the same time.
+#   MAG1:  OnCalendar=*-*-* 02:15:00
+#   MAG2:  OnCalendar=*-*-* 03:15:00
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

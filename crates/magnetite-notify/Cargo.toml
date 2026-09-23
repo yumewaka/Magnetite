@@ -1,0 +1,23 @@
+[package]
+name = "magnetite-notify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-core = { workspace = true }
+magnetite-db = { workspace = true }
+magnetite-mail = { workspace = true }
+
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+rustls = { workspace = true }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "tls12"] }
+hmac = "0.12"
+sha2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

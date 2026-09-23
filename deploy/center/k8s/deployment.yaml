@@ -1,0 +1,109 @@
+# Magnetite Center — single-node deployment (embedded RocksDB store).
+# Exactly one replica with a Recreate strategy: RocksDB is a single-writer store,
+# so two pods must never share the volume. For HA, switch to the shared-SurrealDB
+# model (see the note at the bottom of this file) and raise the replica count.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magnetite-center
+  labels:
+    app.kubernetes.io/name: magnetite-center
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: magnetite-center
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: magnetite-center
+    spec:
+      # Pull the image from the private GitLab registry. The `gitlab-registry` Secret
+      # is created out of band by ops (the CI ServiceAccount has no Secret permission).
+      imagePullSecrets:
+        - name: gitlab-registry
+      # Run as a non-root user. `runAsNonRoot: true` refuses to start an image that
+      # is still root (a safety net if the Dockerfile's USER is dropped). `fsGroup`
+      # makes the mounted PVC group-writable by this uid.
+      #
+      # NOTE for an EXISTING deployment: adding `fsGroup` makes the kubelet recursively
+      # `chown` the volume on next start — on a populated control-plane DB that delays
+      # readiness while it runs. Back up the volume first and validate on a copy with
+      # real data (an empty PVC will not reproduce the ownership change).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: magnetite-center
+          # Build and push this image to a registry your cluster can pull from, then
+          # pin the tag via kustomization.yaml `images:` (leave the manifest default a
+          # non-resolvable local ref so a bare `kubectl apply` never silently pulls
+          # `docker.io/library/magnetite-center`):
+          #   docker build -f crates/magnetite-center/Dockerfile -t <registry>/magnetite-center:<tag> .
+          #   docker push  <registry>/magnetite-center:<tag>
+          image: localhost/magnetite-center:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CENTER_LISTEN
+              value: "0.0.0.0:5555"
+            - name: CENTER_DB_PATH
+              value: /app/data/center
+            - name: CENTER_POLL_SECS
+              value: "30"
+            # The bearer token guarding the API — from a Secret, never inline.
+            - name: CENTER_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: magnetite-center-admin
+                  key: token
+          ports:
+            - name: http
+              containerPort: 5555
+          # Two distinct probes (do NOT collapse them onto one path):
+          #   readiness → /readyz  asks the datastore; 503 drains this pod from the
+          #                        Service without restarting it.
+          #   liveness  → /healthz depends on nothing; only restart when the process
+          #                        itself is wedged (restarting never fixes a bad DB).
+          # Apply order matters: roll out the image that serves /readyz FIRST, then
+          # this manifest — pointing readiness at /readyz on an image without it makes
+          # the probe 404 and the pod never becomes Ready.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              memory: "512Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: magnetite-center-data
+
+# ---------------------------------------------------------------------------
+# HA note: to run multiple replicas, point every pod at ONE shared SurrealDB
+# (set CENTER_DB_URL: "ws://<surreal-svc>:8000" and drop the PVC/DB_PATH), give
+# each pod a stable CENTER_ID (e.g. from a StatefulSet's pod name via the
+# downward API), and raise `replicas`. They elect one leader; only the leader
+# runs the failover loop. The SurrealDB version must match the binary's crate.

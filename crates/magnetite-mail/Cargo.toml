@@ -1,0 +1,26 @@
+[package]
+name = "magnetite-mail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-core = { workspace = true }
+magnetite-db = { workspace = true }
+
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+base64 = { workspace = true }
+rsa = { workspace = true }
+sha2 = { workspace = true }
+hickory-resolver = { workspace = true }
+rand = { workspace = true }
+lettre = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+rcgen = "0.13"

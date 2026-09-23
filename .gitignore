@@ -1,0 +1,14 @@
+/target
+/data
+*.log
+node_modules
+
+# Container build cache (host-mounted) — never commit.
+/.docker-cache
+
+# Ignore build outputs under dist/, but keep the runtime bundle that the
+# prebuilt container consumes (magnetite-server + site/ + magnetite.toml).
+# The large binary and wasm are tracked via Git LFS (see .gitattributes).
+/dist/*
+!/dist/magnetite/
+*.etl

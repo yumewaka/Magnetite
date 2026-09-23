@@ -1,0 +1,101 @@
+# Magnetite configuration for containerized deployment (Compose / Kubernetes).
+# Same as the repo-root magnetite.toml but bound to 0.0.0.0 so the published
+# port is reachable from outside the container. The embedded database is written
+# to ./data (resolved next to this file, i.e. /app/data — a mounted volume).
+
+[server]
+host = "0.0.0.0"
+port = 4000
+# Externally reachable URL (used for SSO redirects + the embedded OIDC issuer).
+# Set this to your real hostname when running behind a reverse proxy.
+base_url = "http://localhost:4000"
+
+# Optional Single Sign-On (OIDC/PKCE). Remove this section to disable SSO login.
+# [sso]
+# issuer_url = "http://localhost:8080"
+# client_id = "magnetite"
+# client_secret = "magnetite-secret"
+# redirect_uri = "http://localhost:4000/auth/callback"
+# scopes = ["openid", "profile", "email"]
+
+[policy]
+dashboard_refresh_secs = 30
+retention_days = 90
+password_min_length = 8
+
+[domains.dns]
+display_name = "DNS"
+icon = "dns"
+enabled = true
+
+# Embedded authoritative DNS server. Uncomment and publish the ports (53/udp,
+# 53/tcp) in your Compose/K8s spec to run it.
+# [domains.dns.server]
+# listen = "0.0.0.0:53"
+# forwarders = ["1.1.1.1:53", "8.8.8.8:53"]
+# query_log = true
+
+[domains.dhcp]
+display_name = "DHCP"
+icon = "dhcp"
+enabled = true
+
+# [domains.dhcp.server]
+# listen = "0.0.0.0:67"
+# query_log = true
+
+[domains.ldap]
+display_name = "LDAP"
+icon = "ldap"
+enabled = true
+# Directory base DN / naming context (set before first run; fixed thereafter).
+base_dn = "dc=example,dc=com"
+
+# [domains.ldap.server]
+# listen = "0.0.0.0:389"
+# query_log = true
+# tls_cert_name = "ldap"   # certificate presented on StartTLS
+
+[domains.mail]
+display_name = "Mail"
+icon = "mail"
+enabled = true
+
+# [domains.mail.server]
+# listen = "0.0.0.0:25"
+# query_log = true
+# [domains.mail.server.relay]
+# host = "smarthost.example.com"
+# port = 25
+# username = "relay-user"
+# password = "relay-pass"
+
+[domains.proxy]
+display_name = "Proxy"
+icon = "proxy"
+enabled = true
+
+# [domains.proxy.server]
+# listen = "0.0.0.0:8080"
+# tls_listen = "0.0.0.0:8443"
+# query_log = true
+
+[domains.k8s]
+display_name = "Container / K8s"
+icon = "k8s"
+enabled = true
+
+[domains.sso]
+display_name = "SSO"
+icon = "sso"
+enabled = true
+
+[domains.watch]
+display_name = "Watch"
+icon = "watch"
+enabled = true
+
+# [domains.watch.server]
+# interval_secs = 60
+# probe_port = 22
+# query_log = true

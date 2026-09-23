@@ -1,0 +1,40 @@
+# Magnetite - Docker Compose / Podman Compose deployment.
+#
+#   docker compose up -d --build       # Docker
+#   podman compose up -d --build       # Podman (or: podman-compose up -d)
+#
+# The web UI is published on http://localhost:4000. The embedded database is
+# kept in the named volume `magnetite-data`, so state survives recreation.
+#
+# To also run the embedded protocol servers, uncomment their [domains.<d>.server]
+# blocks in deploy/magnetite.container.toml AND publish the matching ports below.
+services:
+  magnetite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: magnetite:latest
+    container_name: magnetite
+    restart: unless-stopped
+    ports:
+      - "4000:4000"                # web UI + server functions
+      # --- embedded protocol servers (enable in the config first) ---
+      # - "53:53/udp"              # DNS
+      # - "53:53/tcp"              # DNS (TCP / AXFR)
+      # - "67:67/udp"              # DHCP
+      # - "389:389"                # LDAP (+ StartTLS)
+      # - "25:25"                  # SMTP
+      # - "8080:8080"              # reverse proxy (HTTP)
+      # - "8443:8443"              # reverse proxy (HTTPS)
+    volumes:
+      - magnetite-data:/app/data
+      - ./deploy/magnetite.container.toml:/app/magnetite.toml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:4000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  magnetite-data:

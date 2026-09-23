@@ -1,0 +1,137 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/magnetite-core",
+    "crates/magnetite-db",
+    "crates/magnetite-dns",
+    "crates/magnetite-dhcp",
+    "crates/magnetite-proxy",
+    "crates/magnetite-mail",
+    "crates/magnetite-ldap",
+    "crates/magnetite-krb5",
+    "crates/magnetite-rpc",
+    "crates/magnetite-smb",
+    "crates/magnetite-gpo",
+    "crates/magnetite-feed",
+    "crates/magnetite-k8s",
+    "crates/magnetite-notify",
+    "crates/magnetite-federation",
+    "crates/magnetite-addc",
+    "crates/magnetite-watch",
+    "crates/magnetite-sso",
+    "crates/magnetite-app",
+    "crates/magnetite-server",
+    "crates/magnetite-center",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+magnetite-core = { path = "crates/magnetite-core" }
+magnetite-db = { path = "crates/magnetite-db" }
+magnetite-dns = { path = "crates/magnetite-dns" }
+magnetite-dhcp = { path = "crates/magnetite-dhcp" }
+magnetite-proxy = { path = "crates/magnetite-proxy" }
+magnetite-mail = { path = "crates/magnetite-mail" }
+magnetite-ldap = { path = "crates/magnetite-ldap" }
+magnetite-watch = { path = "crates/magnetite-watch" }
+magnetite-sso = { path = "crates/magnetite-sso" }
+magnetite-app = { path = "crates/magnetite-app" }
+magnetite-krb5 = { path = "crates/magnetite-krb5" }
+magnetite-rpc = { path = "crates/magnetite-rpc" }
+magnetite-smb = { path = "crates/magnetite-smb" }
+magnetite-feed = { path = "crates/magnetite-feed" }
+magnetite-k8s = { path = "crates/magnetite-k8s" }
+magnetite-notify = { path = "crates/magnetite-notify" }
+magnetite-federation = { path = "crates/magnetite-federation" }
+magnetite-addc = { path = "crates/magnetite-addc" }
+
+hickory-proto = { version = "0.25", features = ["dnssec-ring"] }
+hickory-resolver = "0.25"
+rustls-pki-types = "1"
+time = "0.3"
+dhcproto = "0.14"
+hyper = { version = "1", features = ["http1", "http2", "server", "client"] }
+hyper-util = { version = "0.1", features = ["tokio", "client-legacy", "http1", "http2", "server-auto"] }
+http-body-util = "0.1"
+bytes = "1"
+# Non-poisoning Mutex/RwLock: a panic while a lock is held must not poison it and
+# cascade into every later request panicking (a DoS). Used where in-memory state is
+# guarded in sync request paths (e.g. the AD DC RPC directory/SAMR/Netlogon state).
+parking_lot = "0.12"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-pemfile = "2"
+base64 = "0.22"
+# Outbound SMTP relay client. Plaintext/opportunistic only — no TLS feature is
+# enabled, which also avoids pulling an aws-lc-rs build (we standardise on ring).
+lettre = { version = "0.11", default-features = false, features = ["tokio1", "smtp-transport", "builder", "tokio1-rustls-tls"] }
+# LDAP protocol codec (server side) for the embedded directory server.
+ldap3_proto = "0.5"
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+# Embedded OIDC issuer (SSO IdP): RS256 id_tokens + JWKS.
+jsonwebtoken = "10"
+rsa = { version = "0.9", features = ["pem"] }
+rand = "0.8"
+sha2 = { version = "0.10", features = ["oid"] }
+
+leptos = "0.8"
+leptos_meta = "0.8"
+leptos_router = "0.8"
+leptos_axum = "0.8"
+server_fn = { version = "0.8", features = ["axum-no-default"] }
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5" }
+tower-http = { version = "0.6", features = ["trace", "fs", "compression-gzip"] }
+tower-cookies = "0.11"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "v5", "serde", "js"] }
+wasm-bindgen = "0.2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+anyhow = "1"
+toml = "0.8"
+surrealdb = { version = "3", features = ["kv-rocksdb", "protocol-ws"] }
+argon2 = "0.5"
+
+# The Leptos application (compiled to both the SSR server binary and the WASM
+# hydration bundle) is described here so `cargo leptos` can drive the build.
+[[workspace.metadata.leptos]]
+name = "magnetite"
+bin-package = "magnetite-server"
+lib-package = "magnetite-app"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+style-file = "crates/magnetite-app/style/main.scss"
+assets-dir = "crates/magnetite-app/public"
+site-addr = "127.0.0.1:4000"
+reload-port = 4001
+bin-features = []
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+# The `magnetite-server` SSR binary fully monomorphises the Leptos shell view, which
+# emits an enormous amount of debug info. At the dev profile's `debug = 2`, generating
+# that debug info drives rustc/LLVM into a deep recursion that overflows the stack and
+# crashes the compiler (`STATUS_STACK_BUFFER_OVERRUN` / a rustc ICE — no code error).
+# This is the same Leptos-view debug-info explosion that `.cargo/config.toml` already
+# works around for the PDB size and the wasm linker. Dropping debug info for just this
+# one binary makes the build robust; every other crate keeps full debug info.
+[profile.dev.package.magnetite-server]
+debug = 0

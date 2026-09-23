@@ -1,0 +1,41 @@
+[package]
+name = "magnetite-ldap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+magnetite-core = { workspace = true }
+magnetite-db = { workspace = true }
+magnetite-gpo = { path = "../magnetite-gpo" }
+magnetite-krb5 = { path = "../magnetite-krb5" }
+# NTLMSSP (CHALLENGE/verify) + the NT-hash lookup type, reused so an LDAP SASL bind
+# accepts GSS-SPNEGO carrying NTLM (a Windows join that can't get a Kerberos ticket).
+magnetite-rpc = { path = "../magnetite-rpc" }
+
+ldap3_proto = { workspace = true }
+# BER primitives to hand-decode SASL BindRequests (ldap3_proto 0.5.2 encodes but
+# does not decode them) for the GSS-SPNEGO Kerberos bind.
+lber = "0.4"
+nom = "7"
+bytes = { workspace = true }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+anyhow = { workspace = true }
+base64 = { workspace = true }
+# SHA-256 of the upstream's leaf certificate for optional syncrepl TLS cert pinning.
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+# Async LDAP client to drive the server in integration tests (plaintext only).
+ldap3 = { version = "0.11", default-features = false }
+# Raw StartTLS upgrade test (frames LDAP directly + a rustls client).
+rcgen = "0.13"
